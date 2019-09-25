@@ -3,7 +3,7 @@
 set -x
 
 USER="andylytical"
-IMAGE="tiltscanner"
+IMAGE="csv2gsheets"
 TAG=$( date "+%Y%m%d" )
 
 # BUILD IMAGE

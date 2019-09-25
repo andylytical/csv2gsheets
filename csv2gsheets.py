@@ -12,7 +12,7 @@ import sys
 import time
 
 
-def get_or_create_tsdb( name ):
+def get_tsdb( name ):
     sheets_parms = {
         'parent': os.environ['GOOGLE_DRIVE_FOLDER_ID'],
         'pfx': name,
@@ -76,10 +76,9 @@ def run_loop( runonce=False ):
     pause = int( os.environ['BREWPI_BACKUP_INTERVAL_SECONDS'] )
     while True:
         signal.signal( 15, hold_signal )
-        print( "Start new loop...\n find latest beerlog" )
-        beer = get_latest_beerlog()
-        print( "  get-or-create TSDB" )
-        tsdb = get_or_create_tsdb( beer.name )
+        print( "Start new loop" )
+        print( "  get TSDB" )
+        tsdb = get_tsdb( beer.name )
         print( "  assert headers equal" )
         assert_headers_equal( tsdb, beer )
         print( "  update cloud data" )

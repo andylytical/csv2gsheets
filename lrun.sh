@@ -2,13 +2,49 @@
 
 [[ $# -eq 1 ]] && container_name="$1"
 
+### Set Environment Variable(s) for Container
+declare -A ENVIRON
+
+# Google OAuth secret and credentials
+ENVIRON['GOOGLE_AUTH_CLIENT_SECRETS_FILE']="$HOME/.googleauth/client_secrets.json"
+ENVIRON['GOOGLE_AUTH_CREDENTIALS_FILE']="$HOME/.googleauth/credentials.json"
+
+# Parent folder of the spreadsheets
+# Existing spreadsheets must reside in this folder
+# New spreadsheets will be created in this folder
+ENVIRON['GOOGLE_DRIVE_FOLDER_ID']='1d57i-VAQRbCfLDIb9JCHGI3GPBK8cZ4O'
+
+# Inside the spreadsheet, which sheet to populate with data
+ENVIRON['GOOGLE_SHEETS_SHEET_NAME']='Tilt Data'
+
+# Which column (in GOOGLE_SHEETS_SHEET_NAME) has the timestamp
+#ENVIRON['GOOGLE_SHEETS_TSDB_PRIMARY_COLUMN']='A'
+
+# Update frequency (in seconds)
+ENVIRON['BREWPI_BACKUP_INTERVAL_SECONDS']=3600
+
+# Volume mounts
+# Associative array; key=src, val=tgt
+declare -A MOUNTPOINTS=( ["$HOME"]="$HOME" )
+
 image_name=cloudpusherdev
 
 # Build Image
 docker build . -t $image_name
 
+envs=()
+for k in "${!ENVIRON[@]}"; do
+    envs+=( '-e' "$k=${ENVIRON[$k]}" )
+done
+
+mounts=()
+for src in "${!MOUNTPOINTS[@]}"; do
+    dst="${MOUNTPOINTS[$src]}"
+    mounts+=( '--mount' "type=bind,src=$src,dst=$dst" )
+done
+
 # Run Image
 docker run --rm -it \
-  --mount type=bind,src=$HOME,dst=/home/$USER \
-  ${container_name:+--name "$container_name"} \
-  $image_name
+    "${envs[@]}" \
+    "${mounts[@]}" \
+    "$image_name"
