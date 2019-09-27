@@ -1,8 +1,10 @@
-from collections import deque
+#!/usr/bin/env python3
+
 from simplegoogledrive import SimpleGoogleDrive
 from timeseriesdb import TimeSeriesDB
 import bisect
 import signal
+import queue
 
 import pprint
 
@@ -13,6 +15,7 @@ import time
 
 #module level paramter settings
 _params = {}
+_events = queue.SimpleQueue()
 
 ### Getter methods for program parameters.
 def _get_param( pname, ptype=str ):
@@ -36,7 +39,7 @@ def _get_google_folder_id():
     '''
     return _get_param( 'GOOGLE_DRIVE_FOLDER_ID' )
 
-#
+
 def _get_google_filename():
     ''' Google sheets filename (used as search prefix)
     '''
@@ -47,56 +50,26 @@ def _get_google_sheetname():
     '''
     return _get_param( 'GOOGLE_DRIVE_FOLDER_ID' )
 
-#def _get_rate():
-#    return _get_param( 'PYTILT_SAMPLE_RATE', int )
-#
-##def _get_beername():
-##    return _get_param( 'PYTILT_BEERNAME', pathlib.Path )
-#
-#def _get_csvfile():
-#    rawpath = _get_param( 'PYTILT_CSVOUTFILE', pathlib.Path )
-#    tgtpath = rawpath
-#    if not rawpath.is_absolute():
-#        tgtpath = pathlib.Path( '/data' ) / rawpath
-#    return tgtpath
-
 
 def _parse_cmdline():
-#    arg_defaults = {
-#        'PYTILT_COLOR': '',
-#        'PYTILT_CSVOUTFILE': 'pytilt_output.csv',
-#        'PYTILT_SAMPLE_PERIOD': 900,
-#        'PYTILT_SAMPLE_RATE': 5,
-#    }
-#    parser = argparse.ArgumentParser(
-#            description=__doc__,
-#            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-#            argument_default=argparse.SUPPRESS)
-#    parser.add_argument(
-#        '-c', '--color',
-#        dest = 'PYTILT_COLOR',
-#        help = ( 'Tilt color; which tilt to collect data from '
-#                 f'[default={arg_defaults["PYTILT_COLOR"]}] ' )
-#        )
-#    parser.add_argument(
-#        '-f', '--file',
-#        dest = 'PYTILT_CSVOUTFILE',
-#        help = ( 'CSV output file '
-#                 f'[default={arg_defaults["PYTILT_CSVOUTFILE"]}] ' )
-#        )
-#    parser.add_argument(
-#        '-p', '--period', type=int,
-#        dest = 'PYTILT_SAMPLE_PERIOD',
-#        help = ( 'Tilt sample period, in seconds '
-#                 f'[default={arg_defaults["PYTILT_SAMPLE_PERIOD"]}]' )
-#        )
-#    parser.add_argument(
-#        '-r', '--rate', type=int,
-#        dest = 'PYTILT_SAMPLE_RATE',
-#        help = ( 'Tilt sample rate; number of secs between individual samples '
-#                 'in the sampling period'
-#                 f'[default={arg_defaults["PYTILT_SAMPLE_RATE"]}]' )
-#        )
+    arg_defaults = {
+        'GOOGLE_SHEETS_FILENAME': '',
+        'CSV_FILENAME': '',
+    }
+    parser = argparse.ArgumentParser(
+            description=__doc__,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            argument_default=argparse.SUPPRESS)
+    parser.add_argument(
+        '-o', '--outfile',
+        dest = 'GOOGLE_SHEETS_FILENAME',
+        help = ( 'Google Sheets Filename; CSV data will be uploaded to here' ),
+        )
+    parser.add_argument(
+        '-i', '--infile',
+        dest = 'CSV_FILENAME',
+        help = ( 'CSV input file ' ),
+        )
     namespace = parser.parse_args()
     cmdline_args = { k:v for k,v in vars(namespace).items() if v }
     combined = collections.ChainMap( cmdline_args, os.environ, arg_defaults )
@@ -125,71 +98,77 @@ def get_tsdb():
     return TimeSeriesDB( **tsdb_parms )
 
 
-def assert_headers_equal( tsdb, beer ):
-    tsdb_headers = tsdb.headers()
-    local_headers = beer.headers()
-    if len(local_headers) != len(tsdb_headers) :
-        msg = "Header length mismatch: local data header count='{}' cloud data header count='{}'".format(
-            len(local_headers),
-            len(tsdb_headers)
-        )
-        raise UserWarning(msg)
+#def assert_headers_equal( tsdb, beer ):
+#    tsdb_headers = tsdb.headers()
+#    local_headers = beer.headers()
+#    if len(local_headers) != len(tsdb_headers) :
+#        msg = "Header length mismatch: local data header count='{}' cloud data header count='{}'".format(
+#            len(local_headers),
+#            len(tsdb_headers)
+#        )
+#        raise UserWarning(msg)
 
 
-def update_cloud( local, cloud ):
-    # Find local timestamps that are newer than cloud data
-    timestamps = sorted( cloud.timestamps() )
-    start = 0
-    if len(timestamps) > 0:
-        start = bisect.bisect( local.timestamps(), timestamps[-1] )
-    if start < len(local.data['values']) :
-        #APPEND
-        print( "Start index into local data is '{}'".format( start ) )
-        num_rows_added = cloud.append( local.data['values'][start:] )
-        print( 'Added {} new rows'.format( num_rows_added ) )
-    else :
-        print( "Start='{}' , local beer data row count='{}' , nothing to do".format(
-            start, len(local.data['values'])
-        ) )
+#def update_cloud( local, cloud ):
+#    # Find local timestamps that are newer than cloud data
+#    timestamps = sorted( cloud.timestamps() )
+#    start = 0
+#    if len(timestamps) > 0:
+#        start = bisect.bisect( local.timestamps(), timestamps[-1] )
+#    if start < len(local.data['values']) :
+#        #APPEND
+#        print( "Start index into local data is '{}'".format( start ) )
+#        num_rows_added = cloud.append( local.data['values'][start:] )
+#        print( 'Added {} new rows'.format( num_rows_added ) )
+#    else :
+#        print( "Start='{}' , local beer data row count='{}' , nothing to do".format(
+#            start, len(local.data['values'])
+#        ) )
+
+
+def process_events():
+    global _events
+    continue_ok = True
+    while continue_ok:
+        try:
+            sig = _events.get_noblock()
+        except ( queue.EMPTY) as e:
+            continue_ok = False
+            continue
+        os.kill( os.getpid(), sig ) #resend signal to this process
 
 
 def hold_signal( signum, stack ):
-    global EVENTS
-    EVENTS.append( signum )
+    global _events
+    _events.put( signum )
 
 
 def clean_exit( signum, stack ):
     sys.exit()
 
 def run_loop( runonce=False ):
-    global EVENTS
+    global _events
     pause = int( os.environ['BREWPI_BACKUP_INTERVAL_SECONDS'] )
     while True:
-        signal.signal( 15, hold_signal )
+        signal.signal( signal.SIGTERM, hold_signal )
         print( "Start new loop" )
         print( "  ...get TSDB" )
-        tsdb = get_tsdb( beer.name )
-        print( "  assert headers equal" )
-        assert_headers_equal( tsdb, beer )
-        print( "  update cloud data" )
-        update_cloud( beer, tsdb )
+        tsdb = get_tsdb()
+#        print( "  assert headers equal" )
+#        assert_headers_equal( tsdb, beer )
+#        print( "  update cloud data" )
+#        update_cloud( beer, tsdb )
+        signal.signal( signal.SIGTERM, clean_exit )
+        process_events()
         if runonce:
             print( "  end" )
             break
-        if len( EVENTS ) > 0:
-            clean_exit( EVENTS.popleft(), None )
-        signal.signal( 15, clean_exit )
         print( "  pause {}".format( pause ) )
         time.sleep( pause )
 
 
 if __name__ == '__main__':
     pprint.pprint( __name__ )
-#    EVENTS = deque()
-#    signal.signal( 15, clean_exit )
-#    brew_logdir = simpledir.SimpleDir( '/home/pi/brewpi-data/data' )
-#    googl = SimpleGoogleDrive()
-#    val = False
-#    if 'BREWPI_BACKUP_RUNONCE' in os.environ:
-#        val = os.environ['BREWPI_BACKUP_RUNONCE'] in ('1', 'True')
-#    run_loop( runonce=val )
+    signal.signal( signal.SIGTERM, clean_exit )
+    googl = SimpleGoogleDrive()
+    run_loop()

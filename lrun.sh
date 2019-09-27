@@ -11,7 +11,6 @@ ENVIRON['GOOGLE_AUTH_CREDENTIALS_FILE']="$HOME/.googleauth/credentials.json"
 
 # Parent folder of the spreadsheets
 # Existing spreadsheets must reside in this folder
-# New spreadsheets will be created in this folder
 ENVIRON['GOOGLE_DRIVE_FOLDER_ID']='1d57i-VAQRbCfLDIb9JCHGI3GPBK8cZ4O'
 
 # Inside the spreadsheet, which sheet to populate with data
