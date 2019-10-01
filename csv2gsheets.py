@@ -148,7 +148,7 @@ def clean_exit( signum, stack ):
 
 def run_loop( runonce=False ):
     global _events
-    pause = int( os.environ['BREWPI_BACKUP_INTERVAL_SECONDS'] )
+    pause = int( os.environ['CLOUD_BACKUP_INTERVAL_SECONDS'] )
     while True:
         signal.signal( signal.SIGTERM, hold_signal )
         print( "Start new loop" )

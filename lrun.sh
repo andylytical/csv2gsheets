@@ -20,7 +20,7 @@ ENVIRON['GOOGLE_SHEETS_SHEET_NAME']='Tilt Data'
 #ENVIRON['GOOGLE_SHEETS_TSDB_PRIMARY_COLUMN']='A'
 
 # Update frequency (in seconds)
-ENVIRON['BREWPI_BACKUP_INTERVAL_SECONDS']=3600
+ENVIRON['CLOUD_BACKUP_INTERVAL_SECONDS']=3600
 
 # Volume mounts
 # Associative array; key=src, val=tgt
