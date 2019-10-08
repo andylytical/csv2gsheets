@@ -2,20 +2,23 @@
 
 from simplegoogledrive import SimpleGoogleDrive
 from timeseriesdb import TimeSeriesDB
+import argparse
 import bisect
+import collections
+import csv
+import os
+import pathlib
 import signal
-import queue
+import time
 
 import pprint
 
 #needed?
-import os
-import sys
-import time
+#import sys
 
 #module level paramter settings
 _params = {}
-_events = queue.SimpleQueue()
+#_events = queue.SimpleQueue()
 
 ### Getter methods for program parameters.
 def _get_param( pname, ptype=str ):
@@ -32,7 +35,7 @@ def _get_param( pname, ptype=str ):
 def _get_csv_filename():
     ''' Local csv filename
     '''
-    return _get_param( 'CSV_FILENAME', pathlib.Path )
+    return _get_param( 'CSV2GSHEETS_INFILE', pathlib.Path )
 
 def _get_google_folder_id():
     ''' Parent folder in google
@@ -54,7 +57,7 @@ def _get_google_sheetname():
 def _parse_cmdline():
     arg_defaults = {
         'GOOGLE_SHEETS_FILENAME': '',
-        'CSV_FILENAME': '',
+        'CSV2GSHEETS_INFILE': '',
     }
     parser = argparse.ArgumentParser(
             description=__doc__,
@@ -67,12 +70,13 @@ def _parse_cmdline():
         )
     parser.add_argument(
         '-i', '--infile',
-        dest = 'CSV_FILENAME',
+        dest = 'CSV2GSHEETS_INFILE',
         help = ( 'CSV input file ' ),
         )
     namespace = parser.parse_args()
     cmdline_args = { k:v for k,v in vars(namespace).items() if v }
     combined = collections.ChainMap( cmdline_args, os.environ, arg_defaults )
+    pprint.pprint( combined )
     _params[ 'args' ] = combined
 
 
@@ -93,9 +97,28 @@ def get_tsdb():
     tsdb_parms = {
         'sheets_service': googl.sheets,
         'file_id': file_id,
-        'sheet_name': _get_google_sheet_name(),
+        'sheet_name': _get_google_sheetname(),
     }
     return TimeSeriesDB( **tsdb_parms )
+
+def get_csv_data():
+    fn = _get_csv_filename()
+    data = {}
+    timestamps = []
+    values = []
+    with fn.open( newline='' ) as fh:
+        csv_handle = csv.DictReader( fh )
+        headers = csv_handle.fieldnames
+        for row in csv_handle:
+            values.append( row )
+            timestamps.append( row[ headers[0] ] )
+        data[ 'headers' ] = headers
+    data[ 'timestamps' ] = timestamps
+    data[ 'values' ] = values
+    return data
+
+
+
 
 
 #def assert_headers_equal( tsdb, beer ):
@@ -126,40 +149,45 @@ def get_tsdb():
 #        ) )
 
 
-def process_events():
-    global _events
-    continue_ok = True
-    while continue_ok:
-        try:
-            sig = _events.get_noblock()
-        except ( queue.EMPTY) as e:
-            continue_ok = False
-            continue
-        os.kill( os.getpid(), sig ) #resend signal to this process
-
-
-def hold_signal( signum, stack ):
-    global _events
-    _events.put( signum )
-
-
-def clean_exit( signum, stack ):
-    sys.exit()
+#def process_events():
+#    global _events
+#    continue_ok = True
+#    while continue_ok:
+#        try:
+#            sig = _events.get_noblock()
+#        except ( queue.EMPTY) as e:
+#            continue_ok = False
+#            continue
+#        os.kill( os.getpid(), sig ) #resend signal to this process
+#
+#
+#def hold_signal( signum, stack ):
+#    global _events
+#    _events.put( signum )
+#
+#
+#def clean_exit( signum, stack ):
+#    sys.exit()
 
 def run_loop( runonce=False ):
     global _events
     pause = int( os.environ['CLOUD_BACKUP_INTERVAL_SECONDS'] )
     while True:
-        signal.signal( signal.SIGTERM, hold_signal )
+#        signal.signal( signal.SIGTERM, hold_signal )
         print( "Start new loop" )
         print( "  ...get TSDB" )
         tsdb = get_tsdb()
+        print( "Open csv infile..." )
+        csv_data = get_csv_data()
+        pprint.pprint( csv_data )
+        raise SystemExit()
 #        print( "  assert headers equal" )
+### TODO - use only headers from google sheet
 #        assert_headers_equal( tsdb, beer )
 #        print( "  update cloud data" )
 #        update_cloud( beer, tsdb )
-        signal.signal( signal.SIGTERM, clean_exit )
-        process_events()
+#        signal.signal( signal.SIGTERM, clean_exit )
+#        process_events()
         if runonce:
             print( "  end" )
             break
@@ -169,6 +197,7 @@ def run_loop( runonce=False ):
 
 if __name__ == '__main__':
     pprint.pprint( __name__ )
-    signal.signal( signal.SIGTERM, clean_exit )
+#    signal.signal( signal.SIGTERM, clean_exit )
+    _parse_cmdline()
     googl = SimpleGoogleDrive()
     run_loop()
