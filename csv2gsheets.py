@@ -51,7 +51,7 @@ def _get_google_filename():
 def _get_google_sheetname():
     ''' Name of sheet inside google sheets workbook
     '''
-    return _get_param( 'GOOGLE_DRIVE_FOLDER_ID' )
+    return _get_param( 'GOOGLE_SHEETS_SHEETNAME' )
 
 
 def _parse_cmdline():
@@ -101,18 +101,33 @@ def get_tsdb():
     }
     return TimeSeriesDB( **tsdb_parms )
 
-def get_csv_data():
+
+def get_csv_data( timestamp_key='datetime', filter_headers=[] ):
+    ''' Read data from CSV file into custom data structure as:
+        csvdata = { 'headers': [ String, ... ],
+                    'timestamps': [ datetime, ... ],
+                    'values': [ dict, ... ]
+                  }
+        If filter_headers is supplied, keep only those headers that match.
+        If a header in filter_headers does not exist in CSV data, None will be
+        inserted as the a value for the header.
+    '''
     fn = _get_csv_filename()
     data = {}
     timestamps = []
     values = []
     with fn.open( newline='' ) as fh:
         csv_handle = csv.DictReader( fh )
-        headers = csv_handle.fieldnames
+        csv_headers = csv_handle.fieldnames
+        tgt_headers = filter_headers
+        if not filter_headers: #if list is empty, keep all headers from CSV
+            tgt_headers = csv_headers[:] #explicit copy of list
         for row in csv_handle:
-            values.append( row )
-            timestamps.append( row[ headers[0] ] )
-        data[ 'headers' ] = headers
+            #filtered_row = { k:row[k] for k in row if k in tgt_headers }
+            filtered_row = [ row[k] for k in row if k in tgt_headers ]
+            values.append( filtered_row )
+            timestamps.append( row[ timestamp_key ] )
+        data[ 'headers' ] = filter_headers
     data[ 'timestamps' ] = timestamps
     data[ 'values' ] = values
     return data
@@ -120,33 +135,21 @@ def get_csv_data():
 
 
 
-
-#def assert_headers_equal( tsdb, beer ):
-#    tsdb_headers = tsdb.headers()
-#    local_headers = beer.headers()
-#    if len(local_headers) != len(tsdb_headers) :
-#        msg = "Header length mismatch: local data header count='{}' cloud data header count='{}'".format(
-#            len(local_headers),
-#            len(tsdb_headers)
-#        )
-#        raise UserWarning(msg)
-
-
-#def update_cloud( local, cloud ):
-#    # Find local timestamps that are newer than cloud data
-#    timestamps = sorted( cloud.timestamps() )
-#    start = 0
-#    if len(timestamps) > 0:
-#        start = bisect.bisect( local.timestamps(), timestamps[-1] )
-#    if start < len(local.data['values']) :
-#        #APPEND
-#        print( "Start index into local data is '{}'".format( start ) )
-#        num_rows_added = cloud.append( local.data['values'][start:] )
-#        print( 'Added {} new rows'.format( num_rows_added ) )
-#    else :
-#        print( "Start='{}' , local beer data row count='{}' , nothing to do".format(
-#            start, len(local.data['values'])
-#        ) )
+def update_cloud( local, cloud ):
+    # Find local timestamps that are newer than cloud data
+    timestamps = sorted( cloud.timestamps() )
+    start = 0
+    if len(timestamps) > 0:
+        start = bisect.bisect( local['timestamps'], timestamps[-1] )
+    if start < len(local['values']) :
+        #APPEND
+        print( f"Start index into local data is '{start}'" )
+        num_rows_added = cloud.append( local['values'][start:] )
+        print( f'Added {num_rows_added} new rows' )
+    else :
+        print( f"Start='{start}' >= " )
+        print( f"local data row count='{len(local.data['values'])}'" )
+        print( f"Nothing to do" )
 
 
 #def process_events():
@@ -177,15 +180,14 @@ def run_loop( runonce=False ):
         print( "Start new loop" )
         print( "  ...get TSDB" )
         tsdb = get_tsdb()
-        print( "Open csv infile..." )
-        csv_data = get_csv_data()
-        pprint.pprint( csv_data )
-        raise SystemExit()
-#        print( "  assert headers equal" )
-### TODO - use only headers from google sheet
-#        assert_headers_equal( tsdb, beer )
-#        print( "  update cloud data" )
-#        update_cloud( beer, tsdb )
+#        print( "  TSDB headers..." )
+#        pprint.pprint( tsdb.headers() )
+        print( "  ...open csv infile" )
+        csv_data = get_csv_data( filter_headers=tsdb.headers() )
+#        pprint.pprint( csv_data )
+#        raise SystemExit
+        print( "  ...update cloud data" )
+        update_cloud( csv_data, tsdb )
 #        signal.signal( signal.SIGTERM, clean_exit )
 #        process_events()
         if runonce:
