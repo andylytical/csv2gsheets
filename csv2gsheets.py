@@ -5,6 +5,7 @@ from timeseriesdb import TimeSeriesDB
 import argparse
 import bisect
 import collections
+import datetime
 import csv
 import os
 import pathlib
@@ -13,12 +14,8 @@ import time
 
 import pprint
 
-#needed?
-#import sys
-
 #module level paramter settings
 _params = {}
-#_events = queue.SimpleQueue()
 
 ### Getter methods for program parameters.
 def _get_param( pname, ptype=str ):
@@ -102,12 +99,16 @@ def get_tsdb():
     return TimeSeriesDB( **tsdb_parms )
 
 
-def get_csv_data( timestamp_key='datetime', filter_headers=[] ):
+def get_csv_data( filter_headers, timestamp_key='datetime' ):
     ''' Read data from CSV file into custom data structure as:
         csvdata = { 'headers': [ String, ... ],
                     'timestamps': [ datetime, ... ],
                     'values': [ dict, ... ]
                   }
+        filter_headers is a map where:
+            key = (String) header name
+            val = (String) python native type, convert to this type (optional)
+                  If val is not present, type defaults to string (no conversion)
         If filter_headers is supplied, keep only those headers that match.
         If a header in filter_headers does not exist in CSV data, None will be
         inserted as the a value for the header.
@@ -119,20 +120,32 @@ def get_csv_data( timestamp_key='datetime', filter_headers=[] ):
     with fn.open( newline='' ) as fh:
         csv_handle = csv.DictReader( fh )
         csv_headers = csv_handle.fieldnames
-        tgt_headers = filter_headers
-        if not filter_headers: #if list is empty, keep all headers from CSV
-            tgt_headers = csv_headers[:] #explicit copy of list
+        tgt_headers = filter_headers.keys()
         for row in csv_handle:
-            #filtered_row = { k:row[k] for k in row if k in tgt_headers }
-            filtered_row = [ row[k] for k in row if k in tgt_headers ]
+            # create a list of values converted to native Pyton type
+            filtered_row = []
+            for k in row:
+                if k in tgt_headers:
+                    converted_val = str2py( row[k], filter_headers[k] )
+                    filtered_row.append( converted_val )
+                    if k == timestamp_key:
+                        # save the timestamp for this row
+                        timestamps.append( converted_val )
+            # append the list of values as a new row of data
             values.append( filtered_row )
-            timestamps.append( row[ timestamp_key ] )
         data[ 'headers' ] = filter_headers
     data[ 'timestamps' ] = timestamps
     data[ 'values' ] = values
     return data
 
 
+def str2py( val, typ ):
+    ''' Convert a string to a native Python datatype
+    '''
+    newval = val
+    if typ == 'datetime':
+        newval = datetime.datetime.strptime( val, '%Y-%m-%d %H:%M:%S.%f' )
+    return newval
 
 
 def update_cloud( local, cloud ):
@@ -152,44 +165,20 @@ def update_cloud( local, cloud ):
         print( f"Nothing to do" )
 
 
-#def process_events():
-#    global _events
-#    continue_ok = True
-#    while continue_ok:
-#        try:
-#            sig = _events.get_noblock()
-#        except ( queue.EMPTY) as e:
-#            continue_ok = False
-#            continue
-#        os.kill( os.getpid(), sig ) #resend signal to this process
-#
-#
-#def hold_signal( signum, stack ):
-#    global _events
-#    _events.put( signum )
-#
-#
-#def clean_exit( signum, stack ):
-#    sys.exit()
-
 def run_loop( runonce=False ):
     global _events
     pause = int( os.environ['CLOUD_BACKUP_INTERVAL_SECONDS'] )
     while True:
-#        signal.signal( signal.SIGTERM, hold_signal )
         print( "Start new loop" )
         print( "  ...get TSDB" )
         tsdb = get_tsdb()
-#        print( "  TSDB headers..." )
-#        pprint.pprint( tsdb.headers() )
         print( "  ...open csv infile" )
-        csv_data = get_csv_data( filter_headers=tsdb.headers() )
-#        pprint.pprint( csv_data )
-#        raise SystemExit
+        headers_to_keep = { k:None for k in tsdb.headers() }
+        headers_to_keep[ 'datetime' ] = 'datetime' #convert datetime to a Python datetime
+        csv_data = get_csv_data( filter_headers=headers_to_keep )
         print( "  ...update cloud data" )
         update_cloud( csv_data, tsdb )
-#        signal.signal( signal.SIGTERM, clean_exit )
-#        process_events()
+        break
         if runonce:
             print( "  end" )
             break
@@ -199,7 +188,6 @@ def run_loop( runonce=False ):
 
 if __name__ == '__main__':
     pprint.pprint( __name__ )
-#    signal.signal( signal.SIGTERM, clean_exit )
     _parse_cmdline()
     googl = SimpleGoogleDrive()
     run_loop()
