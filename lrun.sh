@@ -2,7 +2,7 @@
 
 [[ $# -eq 1 ]] && container_name="$1"
 
-BEERNAME='Pumpkin Joe Brown'
+BEERNAME='20191013 Pumpkin Joe Brown'
 
 ### Set Environment Variable(s) for Container
 declare -A ENVIRON
@@ -22,7 +22,7 @@ ENVIRON['GOOGLE_SHEETS_SHEETNAME']='Tilt Data'
 #ENVIRON['GOOGLE_SHEETS_TSDB_PRIMARY_COLUMN']='A'
 
 # Update frequency (in seconds)
-ENVIRON['CLOUD_BACKUP_INTERVAL_SECONDS']=3600
+ENVIRON['CLOUD_BACKUP_INTERVAL_SECONDS']=60
 
 # CSV Input file
 ENVIRON['CSV2GSHEETS_INFILE']="$HOME/tiltdata/${BEERNAME}.csv"

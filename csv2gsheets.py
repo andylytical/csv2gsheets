@@ -160,8 +160,8 @@ def update_cloud( local, cloud ):
         num_rows_added = cloud.append( local['values'][start:] )
         print( f'Added {num_rows_added} new rows' )
     else :
-        print( f"Start='{start}' >= " )
-        print( f"local data row count='{len(local.data['values'])}'" )
+        print( f"Start='{start}'" )
+        print( f"local data row count='{len(local['timestamps'])}'" )
         print( f"Nothing to do" )
 
 
@@ -178,7 +178,6 @@ def run_loop( runonce=False ):
         csv_data = get_csv_data( filter_headers=headers_to_keep )
         print( "  ...update cloud data" )
         update_cloud( csv_data, tsdb )
-        break
         if runonce:
             print( "  end" )
             break
