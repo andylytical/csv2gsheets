@@ -24,4 +24,5 @@ ADD ${G_AUTH_URL} ${G_DRIVE_URL} ${G_TSDB_URL} /
 COPY *.py /
 RUN chmod +x /csv2gsheets.py
 
-CMD ["bash"]
+#CMD ["bash"]
+CMD ["/csv2gsheets.py"]
